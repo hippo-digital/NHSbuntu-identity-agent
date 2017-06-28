@@ -6,11 +6,15 @@ import base64
 
 import requests
 import re
+import pyasn1
 
 class authenticator:
     def __init__(self):
         self.auth_uri = 'http://10.211.55.3:5000'
         self.auth_uri = 'https://gas.nis1.national.ncrs.nhs.uk'
+
+        self.user_agent = 'Mozilla/4.0(compatible;IE;GACv10. 0. 0. 1)'
+
         self.asn1_template = """MIIEuAYJKoZIhvcNAQcCoIIEqTCCBKUCAQExCzAJBgUrDgMCGgUAMD8GCSqGSIb3DQEHAaAyBDBm
         YjFjNWI1NzFhYWIzYzI3NTRmZTRkNDk3M2I3MjA5M2Q2MGMzY2M1OTQ1MzZjNzKgggNzMIIDbzCC
         AlegAwIBAgIEVzHBnDANBgkqhkiG9w0BAQUFADAtMQwwCgYDVQQKEwNuaHMxCzAJBgNVBAsTAkNB
@@ -58,7 +62,7 @@ class authenticator:
         <gpPARAM name="service">AUTHENTICATION</gpPARAM>
         <gpPARAM name="challenge">...challenge...</gpPARAM>
         <gpPARAM name="signature">...signature...</gpPARAM>
-        <gpPARAM name="uid">102048843983</gpPARAM>
+        <gpPARAM name="uid">...uid...</gpPARAM>
         <gpPARAM name="card_type">p11</gpPARAM>
         <gpPARAM name="response" encoding="base64">...response....</gpPARAM>
         <gpPARAM name="mobility">0</gpPARAM>
@@ -72,11 +76,72 @@ class authenticator:
 
         return validate_params
 
+    def _build_asn1(self, challenge, cert, signature):
+        from pyasn1.type import univ, char, tag
+        from pyasn1.codec.ber import encoder, decoder
+
+        outer = univ.Sequence()
+        outer[0] = univ.ObjectIdentifier('1.2.840.113549.1.7.2')
+        outer[1] = univ.Set() # Needs to be A0
+        outer[1][0] = univ.Sequence()
+        outer[1][0][0] = univ.Integer(1)
+        outer[1][0][1] = univ.Set()
+        outer[1][0][1][0] = univ.Sequence()
+        outer[1][0][1][0][0] = univ.ObjectIdentifier('1.3.14.3.2.26')
+        outer[1][0][1][0][1] = univ.Null()
+        outer[1][0][2] = univ.Sequence()
+        outer[1][0][2][0] = univ.ObjectIdentifier('1.2.840.113549.1.7.1')
+        outer[1][0][2][1] = univ.Set() # Needs to be A0
+        outer[1][0][2][1][0] = univ.OctetString(base64.b64decode(challenge))
+        outer[1][0][3] = univ.Set() # Needs to be A0
+
+        cert_structure = decoder.decode(cert)
+
+        # new_cert = encoder.encode(cert_structure)
+        # new_cert_b64 = base64.b64encode(new_cert)
+
+        outer[1][0][3][0] = cert_structure[0]
+
+
+        outer[1][0][4] = univ.Set()
+        outer[1][0][4][0] = univ.Sequence()
+        outer[1][0][4][0][0] = univ.Integer(1)
+
+        outer[1][0][4][0][1] = univ.Sequence()
+        outer[1][0][4][0][1][0] = cert_structure[0][0][3]
+        outer[1][0][4][0][1][1] = cert_structure[0][0][1]
+
+        outer[1][0][4][0][2] = univ.Sequence()
+        outer[1][0][4][0][2][0] = univ.ObjectIdentifier('1.3.14.3.2.26')
+        outer[1][0][4][0][2][1] = univ.Null()
+
+        outer[1][0][4][0][3] = univ.Sequence()
+        outer[1][0][4][0][3][0] = univ.ObjectIdentifier('1.2.840.113549.1.1.1')
+        outer[1][0][4][0][3][1] = univ.Null()
+
+        outer[1][0][4][0][4] = univ.OctetString(signature)
+
+        encoded = encoder.encode(outer)
+
+
+        arr = list(encoded)
+
+        arr[15] = 160
+        arr[104] = 160
+        arr[52] = 160
+
+        encoded = bytes(arr)
+
+        b64 = base64.b64encode(encoded).decode('utf-8')
+
+        return encoded
+
+
     def _auth_activate(self):
         auth_activate = requests.post('%s/login/authactivate' % self.auth_uri,
                                       verify=False,
                                       data=self.auth_activate_template,
-                                      headers={'User-Agent': 'Mozilla/4.0(compatible;IE;GACv7. 2. 2. 21)'})
+                                      headers={'User-Agent': self.user_agent})
 
         body = auth_activate.content.decode('utf-8')
         print(body)
@@ -125,8 +190,15 @@ class authenticator:
         for b in toSign:
           bytearr.append(b) #int(format(b, '0')))
 
+        card_objects = session.findObjects([(CKA_CLASS, CKO_CERTIFICATE), (CKA_ID, keyID)])
+
         # find private key and compute signature
         print(session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, keyID)]))
+
+        self.certificate = bytes(card_objects[0].to_dict()['CKA_VALUE'])
+        label = card_objects[0].to_dict()['CKA_LABEL'].decode('utf-8')
+        self.uid = re.findall('(?:CN=)(.*)', label)[0]
+
 
         privKey = session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, keyID)])[0]
 
@@ -145,31 +217,35 @@ class authenticator:
         session.closeSession()
 
     def _auth_validate(self):
-        asn1 = self.asn1_template
+        # asn1 = self.asn1_template
+        #
+        # asn1l = list(base64.b64decode(asn1))
+        # challengel = list(base64.b64decode(self.challenge))
+        #
+        # for n in range(0, len(challengel)):
+        #   asn1l[56 + n] = challengel[n]
+        #
+        # for n in range(0, len(self.signature)):
+        #   asn1l[1084 + n] = self.signature[n]
+        #
+        # asn1b = base64.b64encode(bytes(asn1l)).decode('utf-8')
 
-        asn1l = list(base64.b64decode(asn1))
-        challengel = list(base64.b64decode(self.challenge))
+        new_asn1 = base64.b64encode(self._build_asn1(self.challenge, self.certificate, self.signature)).decode('utf-8')
 
-        for n in range(0, len(challengel)):
-          asn1l[56 + n] = challengel[n]
-
-        for n in range(0, len(self.signature)):
-          asn1l[1084 + n] = self.signature[n]
-
-        asn1b = base64.b64encode(bytes(asn1l)).decode('utf-8')
-
-        auth_validate_request_signature_raw = '%s%s' % (self.smime_header, asn1b)
+        # auth_validate_request_signature_raw = '%s%s' % (self.smime_header, asn1b)
+        auth_validate_request_signature_raw = '%s%s' % (self.smime_header, new_asn1)
         auth_validate_request_signature_encoded = base64.b64encode(auth_validate_request_signature_raw.encode('utf-8'))
 
         auth_validate_request = self.auth_validate_template.replace('...challenge...', self.challenge)
         auth_validate_request = auth_validate_request.replace('...signature...', self.activate_signature)
         auth_validate_request = auth_validate_request.replace('...response...', auth_validate_request_signature_encoded.decode('utf-8'))
+        auth_validate_request = auth_validate_request.replace('...uid...', self.uid)
 
         print(auth_validate_request)
 
         auth_validate_response = requests.post('%s/login/authvalidate' % self.auth_uri,
                                                verify=False,
-                                               headers={'User-Agent': 'Mozilla/4.0(compatible;IE;GACv7. 2. 2. 21)'},
+                                               headers={'User-Agent': self.user_agent},
                                                data=auth_validate_request)
 
         body = auth_validate_response.content.decode('utf-8')
