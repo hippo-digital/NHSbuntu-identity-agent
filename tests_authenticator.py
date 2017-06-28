@@ -67,7 +67,7 @@ class tests_authenticator(unittest.TestCase):
         self.test_role_line = '<gpPARAM name="nhsjobrole34" id="555048771107" orgcode="J81646">GROVE SURGERY, "Admin & Clerical":"Admin":"Registration Authority Agent"</gpPARAM>'
         self.test_challenge = base64.b64decode('MlJN9BVjTdKtTpKrSz3Jvq0sONIAAAFc7yH6TYe8NK6GHS7F7t2tGnmcost76xk7')
         self.test_cert = base64.b64decode('MIIDbzCCAlegAwIBAgIEVzHBnDANBgkqhkiG9w0BAQUFADAtMQwwCgYDVQQKEwNuaHMxCzAJBgNVBAsTAkNBMRAwDgYDVQQDEwdTdWJDQTAyMB4XDTE2MTEyMjE2MTgxOVoXDTE4MTEyMjE2NDgxOVowNjEMMAoGA1UEChMDbmhzMQ8wDQYDVQQLEwZwZW9wbGUxFTATBgNVBAMTDDEwMjA0ODg0Mzk4MzCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEAp/9RZ9baYvAj/LnBy8TaQeUrDJYYK7bbXj8l9IijmHbb+icAjbb0qkof+lrcqYLHShh5oUdStOO5i+u38VTsCaoZu6cwMls/XO2peJMJFFnwfLL9FIvGtC5Kg9p65jAX0YvE/qlT4seeGQK7q6Nax1NrtUStX05n7cUuiu7Ji/cCAwEAAaOCARAwggEMMAsGA1UdDwQEAwIHgDAYBgNVHSAEETAPMA0GCyqGOgCJe2UAAwEBMFAGA1UdHwRJMEcwRaBDoEGkPzA9MQwwCgYDVQQKEwNuaHMxCzAJBgNVBAsTAkNBMRAwDgYDVQQDEwdTdWJDQTAyMQ4wDAYDVQQDEwVDUkw1NzArBgNVHRAEJDAigA8yMDE2MTEyMjE2MTgxOVqBDzIwMTgxMTIyMTY0ODE5WjAfBgNVHSMEGDAWgBQSSoi3gsCYCcPcpsZpewnlLvD2BTAdBgNVHQ4EFgQUlQvtlbbgKoJmZVE2FszB4wJWP70wCQYDVR0TBAIwADAZBgkqhkiG9n0HQQAEDDAKGwRWOC4xAwIEsDANBgkqhkiG9w0BAQUFAAOCAQEAbEGtl/aHjbafhCyq7gSLq++wN5eCMvxBVZ8cbXR1qWDBr0EBkmq7AUr19HtR5OG+lCTA/uRcAMDqvKp4GgRd0MmdjwfJzqwZH2ztLcg9zqw1t4nfRUwa1kN1aXSNlgw59iBYqDr4w0MVY8ioGZyoIT6S6/DVgH32HLpKo1hkKXJSvd8H2R20FBdTR5D03Ka8yfIRftIsH74C5Ikl3Zaz58ifmLSUUdEjnRufKyf1OZ5RTzTub+ubD1C5Mdx2RB2zPbt3pR16YK3OXTnPMsbIaO9NKHrbZSqbHALsC7nBhEY4ipxr8UjFg2ZcEDPvdIQiHj+Z4U2xGn3kJ7Gmo91STQ==')
-
+        self.test_signature = b'=*\xf5\x81\xc7\x15_\x0f\xd9\xf8L\xcdhr\xde\x84M\xfdd\x89\x9fG\xa4\xe4\xe7V\xe2a\x1d+\xfbD\xbc`\xe8p\xaf\xa7JZ\x1d\xb25\xa1\x9a\\\xdap@\x96\xa4s\x1dh\xba\x13)]\x014n\x93\x13\x07\x1e\xe5&DwG#Zo;\xad\xae\x14\xb3e\xf7=\x1fj\x01\x8cZ\x1crs\xb1N\x8eWd\x9c\x1f8qcl\xaf\xd7~\xa8\x9dmP\x95\x84?]\xf8A\\\xe4\x11\t\xbb>\x10X\x8a|\xd5+\xe0\xaf('
 
     def test_authenticate_whenCalledWithValidPasscodeAndInsertedSmartcard_authenticatesAndReturnsUserDetails(self):
         atn = authenticator()
@@ -96,7 +96,7 @@ class tests_authenticator(unittest.TestCase):
 
     def test_build_asn1(self):
         atn = authenticator()
-        atn._build_asn1(self.test_challenge, self.test_cert)
+        atn._build_asn1(self.test_challenge, self.test_cert, self.test_signature)
 
 
 
