@@ -65,25 +65,31 @@ class tests_authenticator(unittest.TestCase):
 </gpOBJECT>"""
         self.test_role_line = '<gpPARAM name="nhsjobrole34" id="555048771107" orgcode="J81646">GROVE SURGERY, "Admin & Clerical":"Admin":"Registration Authority Agent"</gpPARAM>'
 
+
     def test_authenticate_whenCalledWithValidPasscodeAndInsertedSmartcard_authenticatesAndReturnsUserDetails(self):
         atn = authenticator()
 
         res = atn.authenticate("1234")
 
-        self.assertIn(res, 'sso_ticket')
-        self.assertIn(res, 'roles')
+        self.assertIn('sso_ticket', res)
+        self.assertIn('roles', res)
+
+    def test__parse_validate_response_whenCalledWithValidAuthValidateResponse(self):
+        atn = authenticator()
+        res = atn._parse_validate_response(self.test_validate_response)
+
+        self.assertIn('sso_ticket', res)
 
     def test__extract_role_whenCalledWithValidRoleLine_returnsRoleDetailInDict(self):
         atn = authenticator()
         role = atn._extract_role(self.test_role_line)
 
-        self.assertIn(role, 'id')
-        self.assertIn(role, 'orgcode')
-        self.assertIn(role, 'role_details')
-        self.assertIn(role['role_details'], 'org_name')
-        self.assertIn(role['role_details'], 'role_name')
-        self.assertIn(role['role_details'], 'role_type')
-        self.assertIn(role['role_details'], 'role_subtype')
+        self.assertIn('id', role)
+        self.assertIn('org_code', role)
+        self.assertIn('org_name', role)
+        self.assertIn('name', role)
+        self.assertIn('type', role)
+        self.assertIn('sub_type', role)
 
 
 

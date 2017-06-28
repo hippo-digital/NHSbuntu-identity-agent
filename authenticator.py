@@ -181,14 +181,15 @@ class authenticator:
     def _parse_validate_response(self, auth_validate_response):
         ret = {'roles': []}
 
-        ret['sso_ticket'] = self._extract_parameter(auth_validate_response, 'sso_ticket')
-        ret['cn'] = self._extract_parameter(auth_validate_response, 'cn')
-        ret['sso_logout_url'] = self._extract_parameter(auth_validate_response, 'sso_logout_url')
+        ret['sso_ticket'] = re.findall('(?:sso_ticket\">)([^<]*)', auth_validate_response)[0]
+        ret['cn'] = re.findall('(?:cn\">)([^<]*)', auth_validate_response)[0]
+        ret['sso_logout_url'] = re.findall('(?:sso_logout_url\">)([^<]*)', auth_validate_response)[0]
 
         for l in auth_validate_response.split('\n'):
             if 'name="nhsjobrole' in l:
                 ret['roles'].append(self._extract_role(l))
 
+        return ret
 
 
     def _extract_parameter(self, body, parameter_name):
@@ -196,9 +197,17 @@ class authenticator:
 
     def _extract_role(self, role_line):
         ret = {}
-        org_code = re.findall('(?:orgcode=\")([a-z,A-Z,0-9,/+=]*)', role_line)[0]
-        role_id = self._extract_parameter(role_line, 'id')
-        return {}
+        ret['org_code'] = re.findall('(?:orgcode=\")([a-z,A-Z,0-9,/+=]*)', role_line)[0]
+        role_string = re.findall('(?:orgcode=\"\w*\">)([^<]*)', role_line)[0]
+
+        role_parts_a = role_string.split(',')
+        role_parts_b = role_parts_a[1].split(':')
+        ret['org_name'] = role_parts_a[0]
+        ret['name'] = role_parts_b[2].strip('"')
+        ret['type'] = role_parts_b[0].strip('"')
+        ret['sub_type'] = role_parts_b[1].strip('"')
+        ret['id'] = re.findall('(?:id=\")([a-z,A-Z,0-9,/+=]*)', role_line)[0]
+        return ret
 
 
 
