@@ -13,6 +13,8 @@ NOTE: if you are on a version of Ubuntu other than 16.04/xenial (or an Ubuntu de
 
 `sudo apt install libclassicclient libssl0.9.8 ifdokccid`
 
+`git clone` this repo then `cd` into the cloned directory
+
 ## Usage (testing)
 
 `python -i authenticator.py`
