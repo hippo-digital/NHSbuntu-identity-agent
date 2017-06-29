@@ -1,6 +1,7 @@
 import unittest
 import base64
 from authenticator import authenticator
+import requests
 
 
 class tests_authenticator(unittest.TestCase):
@@ -74,8 +75,23 @@ class tests_authenticator(unittest.TestCase):
 
         res = atn.authenticate("1234")
 
+        import json
+        import urllib
+        print(json.dumps(res))
+        print(res['sso_ticket'])
+        print(urllib.parse.quote_plus(res['sso_ticket']))
+
         self.assertIn('sso_ticket', res)
         self.assertIn('roles', res)
+
+        role_assertion_uri = 'https://gas.nis1.national.ncrs.nhs.uk/saml/RoleAssertion'
+
+        role_assertion_result = requests.get(role_assertion_uri, verify=False, params={'token': res['sso_ticket']})
+
+        role_assertion_body = role_assertion_result.content.decode('utf-8')
+        self.assertIn('<samlp:StatusCode Value="samlp:Success"/>', role_assertion_body)
+        None
+
 
     def test__parse_validate_response_whenCalledWithValidAuthValidateResponse(self):
         atn = authenticator()

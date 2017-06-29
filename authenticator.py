@@ -46,6 +46,15 @@ class authenticator:
         <gpPARAM name="response" encoding="base64">...response....</gpPARAM>
         <gpPARAM name="mobility">0</gpPARAM>
         </gpOBJECT>"""
+        self.auth_logout_template = """<?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE USER SYSTEM "gpOBJECT.DTD">
+        <gpOBJECT>
+        <gpPARAM name="service">LOGOUT</gpPARAM>
+        <gpPARAM name="sso_ticket">...ticket...</gpPARAM>
+        <gpPARAM name="log_session_id">SsvU2/plLw</gpPARAM>
+        <gpPARAM name="device_id">b02edd23,ClientIP=10.211.55.3</gpPARAM>
+        <gpPARAM name="uid">...uid...</gpPARAM>
+        </gpOBJECT>"""
 
         self.role_select_uri = '%s/saml/RoleSelectionGP.jsp' % self.auth_uri
 
@@ -55,13 +64,22 @@ class authenticator:
         validate_response = self._auth_validate()
         validate_params = self._parse_validate_response(validate_response)
 
-        print(validate_params)
-        print(validate_params['sso_ticket'])
+        self.auth_params = validate_params
 
         self._role_select(validate_params)
 
         return validate_params
 
+    def logout(self):
+        logout_body = self.auth_logout_template \
+                    .replace('...ticket...', self.auth_params['sso_ticket']) \
+                    .replace('...uid...', self.auth_params['uid'])
+
+        result = requests.get(self.auth_params['sso_logout_url'],
+                              verify=False,
+                              headers={'User-Agent': self.user_agent},
+                              data=logout_body)
+        
     # Very ropey PKCS#7/CMS wrapping
     def _build_asn1(self, challenge, cert, signature):
         from pyasn1.type import univ, char, tag
@@ -217,9 +235,6 @@ class authenticator:
                                           'ssbMode': 0,
                                           'fallbackStatus': 0,
                                           'gacVersion': self.gac_version})
-
-            None
-
 
     def _parse_validate_response(self, auth_validate_response):
         ret = {'roles': []}
