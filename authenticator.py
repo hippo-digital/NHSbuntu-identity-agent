@@ -8,6 +8,8 @@ import string
 import cms
 import card
 
+import logging
+
 class authenticator:
     def __init__(self):
         self.gac_version = 'GACv10. 0. 0. 1'
@@ -78,14 +80,25 @@ class authenticator:
 
         self.role_select_uri = '%s/saml/RoleSelectionGP.jsp' % self.auth_uri
 
+        self.log = logging.getLogger('authenticator')
+        self.log.setLevel(logging.DEBUG)
+        fh = logging.FileHandler('authenticator.log')
+        fh.setLevel(logging.DEBUG)
+        self.log.addHandler(fh)
+        formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s')
+        fh.setFormatter(formatter)
+        self.log.info("Authenticator started")
+
     def authenticate(self, passcode):
         self.session_id = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
         self._auth_activate()
 
         self.card_info = card.sign(self.pkcs11lib, passcode, self.challenge)
+        # self.log.info('Method=authenticate, Message=Challenge Sign Result, CardInfo=%s' % self.card_info)
 
         validate_response = self._auth_validate()
         validate_params = self._parse_validate_response(validate_response)
+        self.log.info('Method=authenticate, Message=Validate Result, CardInfo=%s' % validate_params)
 
         self.auth_params = validate_params
         self.auth_params['uid'] = self.card_info['uid']
@@ -113,6 +126,8 @@ class authenticator:
                                                   ip = self.ip_address,
                                                   session_id = self.session_id)
 
+        self.log.info('Method=_auth_activate, Message=Calling Activate, Body=%s' % auth_activate_body)
+
         auth_activate = requests.post('%s/login/authactivate' % self.auth_uri,
                                       verify=False,
                                       data=auth_activate_body,
@@ -120,11 +135,16 @@ class authenticator:
 
         body = auth_activate.content.decode('utf-8')
 
+        self.log.info('Method=_auth_activate, Message=Activate Response Recevied, Status=%s, Body=%s' % (auth_activate.status_code, body))
+
         self.challenge = self._extract_parameter(body, 'challenge')
         self.activate_signature = self._extract_parameter(body, 'signature')
 
+        self.log.info('Method=_auth_activate, Challenge=%s, Server Signature=%s' % (self.challenge, self.activate_signature))
+
     def _auth_validate(self):
         cms_envelope = base64.b64encode(cms.envelope(self.challenge, self.card_info['certificate'], self.card_info['signature'])).decode('utf-8')
+        self.log.info('Method=_auth_validate, Message=CMS Envelope Built, CMS=%s' % cms_envelope)
 
         auth_validate_request_signature_raw = '%s%s' % (self.smime_header, cms_envelope)
         auth_validate_request_signature_encoded = base64.b64encode(auth_validate_request_signature_raw.encode('utf-8'))
@@ -138,12 +158,16 @@ class authenticator:
                                                            signature = self.activate_signature,
                                                            response = auth_validate_request_signature_encoded.decode('utf-8'))
 
+        self.log.info('Method=_auth_validate, Message=Validate Request Prepared, Request=%s' % auth_validate_body)
+
         auth_validate_response = requests.post('%s/login/authvalidate' % self.auth_uri,
                                                verify=False,
                                                headers={'User-Agent': self.user_agent},
                                                data=auth_validate_body)
 
         body = auth_validate_response.content.decode('utf-8')
+
+        self.log.info('Method=_auth_activate, Message=Activate Response Recevied, Status=%s, Body=%s' % (auth_validate_response.status_code, body))
 
         return body
 
