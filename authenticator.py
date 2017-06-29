@@ -94,7 +94,7 @@ class authenticator:
         self._auth_activate()
 
         self.card_info = card.sign(self.pkcs11lib, passcode, self.challenge)
-        # self.log.info('Method=authenticate, Message=Challenge Sign Result, CardInfo=%s' % self.card_info)
+        self.log.info('Method=authenticate, Message=Challenge Sign Result, Signature=%s' % self.card_info['signature'])
 
         validate_response = self._auth_validate()
         validate_params = self._parse_validate_response(validate_response)

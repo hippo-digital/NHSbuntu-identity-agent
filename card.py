@@ -18,7 +18,7 @@ def sign(pkcs11lib, passcode, challenge):
 
     card_info = _get_card_info(session)
 
-    card_info['signature'] = session.sign(card_info['private_key'], toSign, Mechanism(CKM_SHA1_RSA_PKCS, None))
+    card_info['signature'] = bytes(session.sign(card_info['private_key'], toSign, Mechanism(CKM_SHA1_RSA_PKCS, None)))
 
     session.logout()
     session.closeSession()
@@ -45,7 +45,7 @@ def _get_card_info(session):
     info['certificate'] = bytes(card_objects[0].to_dict()['CKA_VALUE'])
     info['label'] = card_objects[0].to_dict()['CKA_LABEL'].decode('utf-8')
 
-    info['uid'] = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT']))
+    info['uid'] = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT'])).decode('utf-8')
     #re.findall('(?:CN=)(.*)', info['label'])[0]
 
     info['private_key'] = session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, info['key_id'])])[0]
