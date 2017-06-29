@@ -74,7 +74,7 @@ class tests_authenticator(unittest.TestCase):
 
         import json
         import urllib
-        print(json.dumps(res))
+        print(res)
         print(res['sso_ticket'])
         print(urllib.parse.quote_plus(res['sso_ticket']))
 
@@ -94,10 +94,11 @@ class tests_authenticator(unittest.TestCase):
         # self.assertNotIn('<samlp:StatusCode Value="samlp:Success"/>', role_assertion_body)
 
     def test__parse_validate_response_whenCalledWithValidAuthValidateResponse(self):
+        session = {}
         atn = authenticator()
-        res = atn._parse_validate_response(self.test_validate_response)
+        atn._parse_validate_response(self.test_validate_response, session)
 
-        self.assertIn('sso_ticket', res)
+        self.assertIn('sso_ticket', session)
 
     def test__extract_role_whenCalledWithValidRoleLine_returnsRoleDetailInDict(self):
         atn = authenticator()

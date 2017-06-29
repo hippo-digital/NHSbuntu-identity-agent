@@ -90,22 +90,21 @@ class authenticator:
         self.log.info("Authenticator started")
 
     def authenticate(self, passcode):
-        self.session_id = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))
-        self._auth_activate()
+        session = {'id': ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))}
 
-        self.card_info = card.sign(self.pkcs11lib, passcode, self.challenge)
-        self.log.info('Method=authenticate, Message=Challenge Sign Result, Signature=%s' % self.card_info['signature'])
+        self._auth_activate(session)
+        self.log.info('Method=authenticate, Message=Activate Received, Session=%s' % session)
 
-        validate_response = self._auth_validate()
-        validate_params = self._parse_validate_response(validate_response)
-        self.log.info('Method=authenticate, Message=Validate Result, CardInfo=%s' % validate_params)
+        card.sign(self.pkcs11lib, passcode, session)
+        self.log.info('Method=authenticate, Message=Challenge Signed, Session=%s' % session)
 
-        self.auth_params = validate_params
-        self.auth_params['uid'] = self.card_info['uid']
+        self._auth_validate(session)
+        self.log.info('Method=authenticate, Message=Validate Received, Session=%s' % session)
 
-        self._role_select(validate_params)
+        self._role_select(session)
+        self.log.info('Method=authenticate, Message=RoleSelect Received, Session=%s' % session)
 
-        return validate_params
+        return session
 
     def logout(self):
         logout_body_template = Template(self.auth_logout_template)
@@ -115,16 +114,16 @@ class authenticator:
                                                   ip = self.ip_address,
                                                   session_id = self.session_id)
 
-        result = requests.get(self.auth_params['sso_logout_url'],
+        requests.get(self.auth_params['sso_logout_url'],
                               verify=False,
                               headers={'User-Agent': self.user_agent},
                               data=logout_body)
 
-    def _auth_activate(self):
+    def _auth_activate(self, session):
         auth_activate_template = Template(self.auth_activate_template)
         auth_activate_body = auth_activate_template.render(device_id = self.device_id,
                                                   ip = self.ip_address,
-                                                  session_id = self.session_id)
+                                                  session_id = session['id'])
 
         self.log.info('Method=_auth_activate, Message=Calling Activate, Body=%s' % auth_activate_body)
 
@@ -137,25 +136,28 @@ class authenticator:
 
         self.log.info('Method=_auth_activate, Message=Activate Response Recevied, Status=%s, Body=%s' % (auth_activate.status_code, body))
 
-        self.challenge = self._extract_parameter(body, 'challenge')
-        self.activate_signature = self._extract_parameter(body, 'signature')
+        session['challenge'] = self._extract_parameter(body, 'challenge')
+        session['activate_signature'] = self._extract_parameter(body, 'signature')
 
-        self.log.info('Method=_auth_activate, Challenge=%s, Server Signature=%s' % (self.challenge, self.activate_signature))
+        self.log.info('Method=_auth_activate, Challenge=%s, Server Signature=%s' % (session['challenge'], session['activate_signature']))
 
-    def _auth_validate(self):
-        cms_envelope = base64.b64encode(cms.envelope(self.challenge, self.card_info['certificate'], self.card_info['signature'])).decode('utf-8')
+    def _auth_validate(self, session):
+        cms_envelope = base64.b64encode(cms.envelope(session['challenge'],
+                                                     session['certificate'],
+                                                     session['signature'])).decode('utf-8')
+
         self.log.info('Method=_auth_validate, Message=CMS Envelope Built, CMS=%s' % cms_envelope)
 
         auth_validate_request_signature_raw = '%s%s' % (self.smime_header, cms_envelope)
         auth_validate_request_signature_encoded = base64.b64encode(auth_validate_request_signature_raw.encode('utf-8'))
 
         auth_validate_template = Template(self.auth_validate_template)
-        auth_validate_body = auth_validate_template.render(uid = self.card_info['uid'],
+        auth_validate_body = auth_validate_template.render(uid = session['uid'],
                                                            device_id = self.device_id,
                                                            ip = self.ip_address,
-                                                           session_id = self.session_id,
-                                                           challenge = self.challenge,
-                                                           signature = self.activate_signature,
+                                                           session_id = session['id'],
+                                                           challenge = session['challenge'],
+                                                           signature = session['activate_signature'],
                                                            response = auth_validate_request_signature_encoded.decode('utf-8'))
 
         self.log.info('Method=_auth_validate, Message=Validate Request Prepared, Request=%s' % auth_validate_body)
@@ -169,33 +171,31 @@ class authenticator:
 
         self.log.info('Method=_auth_validate, Message=Validate Response Received, Status=%s, Body=%s' % (auth_validate_response.status_code, body))
 
-        return body
+        self._parse_validate_response(body, session)
 
-    def _role_select(self, auth_params):
-        if (len(auth_params['roles']) > 0):
+    def _role_select(self, session):
+        if (len(session['roles']) > 0):
             uri = self.role_select_uri
 
-            result = requests.get(uri,
-                                  verify=False,
-                                  headers={'User-Agent': self.user_agent},
-                                  params={'token': auth_params['sso_ticket'],
-                                          'selectedRoleUid': auth_params['roles'][0]['id'],
-                                          'ssbMode': 0,
-                                          'fallbackStatus': 0,
-                                          'gacVersion': self.gac_version})
+            requests.get(uri,
+                         verify=False,
+                         headers={'User-Agent': self.user_agent},
+                         params={'token': session['sso_ticket'],
+                                 'selectedRoleUid': session['roles'][0]['id'],
+                                 'ssbMode': 0,
+                                 'fallbackStatus': 0,
+                                 'gacVersion': self.gac_version})
 
-    def _parse_validate_response(self, auth_validate_response):
-        ret = {'roles': []}
+    def _parse_validate_response(self, auth_validate_response, session):
+        session['roles'] = []
 
-        ret['sso_ticket'] = re.findall('(?:sso_ticket\">)([^<]*)', auth_validate_response)[0]
-        ret['cn'] = re.findall('(?:cn\">)([^<]*)', auth_validate_response)[0]
-        ret['sso_logout_url'] = re.findall('(?:sso_logout_url\">)([^<]*)', auth_validate_response)[0]
+        session['sso_ticket'] = re.findall('(?:sso_ticket\">)([^<]*)', auth_validate_response)[0]
+        session['cn'] = re.findall('(?:cn\">)([^<]*)', auth_validate_response)[0]
+        session['sso_logout_url'] = re.findall('(?:sso_logout_url\">)([^<]*)', auth_validate_response)[0]
 
         for l in auth_validate_response.split('\n'):
             if 'name="nhsjobrole' in l:
-                ret['roles'].append(self._extract_role(l))
-
-        return ret
+                session['roles'].append(self._extract_role(l))
 
     def _extract_parameter(self, body, parameter_name):
         return re.findall('(?:%s\">)([a-z,A-Z,0-9,/+=]*)' % parameter_name, body)[0]

@@ -4,8 +4,8 @@ import re
 from pyasn1.type import univ, char, tag
 from pyasn1.codec.ber import encoder, decoder
 
-def sign(pkcs11lib, passcode, challenge):
-    toSign = base64.b64decode(challenge)
+def sign(pkcs11lib, passcode, auth_session):
+    toSign = base64.b64decode(auth_session['challenge'])
 
     pkcs11 = PyKCS11Lib()
     pkcs11.load(pkcs11lib)
@@ -13,22 +13,24 @@ def sign(pkcs11lib, passcode, challenge):
     slots = pkcs11.getSlotList()
     slot = slots[0]
 
-    session = pkcs11.openSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION)
-    session.login(passcode, CKU_USER)
+    card_session = pkcs11.openSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION)
+    card_session.login(passcode, CKU_USER)
 
-    card_info = _get_card_info(session)
+    card_info = _get_card_info(card_session)
 
-    card_info['signature'] = bytes(session.sign(card_info['private_key'], toSign, Mechanism(CKM_SHA1_RSA_PKCS, None)))
+    auth_session['signature'] = bytes(card_session.sign(card_info['private_key'], toSign, Mechanism(CKM_SHA1_RSA_PKCS, None)))
+    auth_session['uid'] = card_info['uid']
+    auth_session['certificate'] = card_info['certificate']
 
-    session.logout()
-    session.closeSession()
+    card_session.logout()
+    card_session.closeSession()
 
-    return card_info
+    # return card_info
 
-def _get_card_info(session):
+def _get_card_info(card_session):
     info = {}
 
-    private_keys = session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY),])
+    private_keys = card_session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY),])
 
     for private_key in private_keys:
       key_info = private_key.to_dict()
@@ -40,16 +42,22 @@ def _get_card_info(session):
 
         info['key_id'] = key_info['CKA_ID']
 
-    card_objects = session.findObjects([(CKA_CLASS, CKO_CERTIFICATE), (CKA_ID, info['key_id'])])
+    card_objects = card_session.findObjects([(CKA_CLASS, CKO_CERTIFICATE), (CKA_ID, info['key_id'])])
 
     info['certificate'] = bytes(card_objects[0].to_dict()['CKA_VALUE'])
     info['label'] = card_objects[0].to_dict()['CKA_LABEL'].decode('utf-8')
 
-    info['uid'] = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT'])).decode('utf-8')
-    #re.findall('(?:CN=)(.*)', info['label'])[0]
+    uid = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT']))
 
-    info['private_key'] = session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, info['key_id'])])[0]
-    info['public_key'] = session.findObjects([(CKA_CLASS, CKO_PUBLIC_KEY), (CKA_ID, info['key_id'])])[0]
+    if type(uid) is bytes:
+        info['uid'] = uid.decode('utf-8')
+    elif type(uid) is str:
+        info['uid'] = uid
+    else:
+        info['uid'] = 'unknown'
+
+    info['private_key'] = card_session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, info['key_id'])])[0]
+    info['public_key'] = card_session.findObjects([(CKA_CLASS, CKO_PUBLIC_KEY), (CKA_ID, info['key_id'])])[0]
 
     return info
 
