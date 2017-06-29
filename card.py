@@ -1,6 +1,8 @@
 import base64
 from PyKCS11 import *
 import re
+from pyasn1.type import univ, char, tag
+from pyasn1.codec.ber import encoder, decoder
 
 def sign(pkcs11lib, passcode, challenge):
     toSign = base64.b64decode(challenge)
@@ -42,9 +44,19 @@ def _get_card_info(session):
 
     info['certificate'] = bytes(card_objects[0].to_dict()['CKA_VALUE'])
     info['label'] = card_objects[0].to_dict()['CKA_LABEL'].decode('utf-8')
-    info['uid'] = re.findall('(?:CN=)(.*)', info['label'])[0]
+
+    info['uid'] = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT']))
+    #re.findall('(?:CN=)(.*)', info['label'])[0]
 
     info['private_key'] = session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY), (CKA_ID, info['key_id'])])[0]
     info['public_key'] = session.findObjects([(CKA_CLASS, CKO_PUBLIC_KEY), (CKA_ID, info['key_id'])])[0]
 
     return info
+
+def _get_uid_from_subject(asn1):
+    subject_info = {}
+    subject = decoder.decode(asn1)
+
+    uid = subject[0][2][0][1]._value
+
+    return uid

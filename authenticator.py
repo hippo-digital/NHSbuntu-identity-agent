@@ -1,12 +1,7 @@
-# from __future__ import print_function
-
 import base64
-
 import requests
 import re
 from jinja2 import Template
-import socket
-import pyasn1
 import random
 import string
 
@@ -24,7 +19,7 @@ class authenticator:
 
         self.auth_session = {}
         self.user_agent = 'Mozilla/4.0(compatible;IE;%s)' % self.gac_version
-        
+
         self.smime_header = """MIME-Version: 1.0
         Content-Disposition: attachment; filename="smime.p7m"
         Content-Type: application/x-pkcs7-mime; name="smime.p7m"
