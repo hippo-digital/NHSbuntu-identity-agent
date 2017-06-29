@@ -24,3 +24,28 @@ NOTE: if you are on a version of Ubuntu other than 16.04/xenial (or an Ubuntu de
 `>>> response = auth.authenticate("1234")`
 
 should respond with XML containing a valid ticket for NHS Spine SSO
+
+
+## What works, and what doesn't...
+
+### Working
+
+* Series 8 Smartcards
+* Omnikey 3121 card readers
+* Basic Spine authentication
+
+
+### Not Working
+
+* Series 4, 5 and 6 Smartcards
+* Any card management functions
+* Session persistence
+* Card expiry and passcode notifications
+* Role selection
+
+
+
+
+
+
+

@@ -99,5 +99,20 @@ class tests_authenticator(unittest.TestCase):
         atn._build_asn1(self.test_challenge, self.test_cert, self.test_signature)
 
 
+    def test_asn1_stuff(self):
+        from pyasn1.type import univ, char, tag
+        from pyasn1.codec.ber import encoder, decoder
+
+        a = univ.Set()
+        a.tagSet = tag.TagSet(tag.Tag(128,32,40),tag.Tag(128,32,40))
+
+        b = encoder.encode(a)
+
+        c = list(b)
+
+        None
+
+
+
 
 
