@@ -30,18 +30,16 @@ should respond with XML containing a valid ticket for NHS Spine SSO
 
 ### Working
 
-* Series 8 Smartcards
-* Omnikey 3121 card readers
+* Series 6 and 8 Smartcards (possibly 4 & 5 - not tested)
+* Omnikey 3121 and Gemalto PC Twin card readers
 * Basic Spine authentication
 
 
 ### Not Working
 
-* Series 4, 5 and 6 Smartcards
 * Any card management functions
 * Session persistence
 * Card expiry and passcode notifications
-* Role selection
 
 
 
