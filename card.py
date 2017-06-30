@@ -1,17 +1,29 @@
 import base64
 from PyKCS11 import *
-import re
-from pyasn1.type import univ, char, tag
-from pyasn1.codec.ber import encoder, decoder
+from pyasn1.codec.ber import decoder
 
 def sign(pkcs11lib, passcode, auth_session):
     toSign = base64.b64decode(auth_session['challenge'])
 
     pkcs11 = PyKCS11Lib()
     pkcs11.load(pkcs11lib)
+    pkcs11_info = pkcs11.getInfo().__dict__
+    auth_session['analytics']['MiddlewareInstalled'] = '%s %s, libver %s, cryptokiver %s' \
+                                                       % (pkcs11_info['manufacturerID'].decode('utf-8').strip(),
+                                                          pkcs11_info['libraryDescription'].decode('utf-8').strip(),
+                                                          pkcs11_info['libraryVersion'],
+                                                          pkcs11_info['cryptokiVersion'])
 
     slots = pkcs11.getSlotList()
     slot = slots[0]
+
+    for s in slots:
+        slot_info = pkcs11.getSlotInfo(s)
+        slot_description = slot_info.to_dict()['slotDescription'].decode('utf-8').strip()
+        auth_session['analytics']['CardReaders'].append(slot_description)
+
+        if s == slot:
+            auth_session['analytics']['ActiveCardReader'] = slot_description
 
     card_session = pkcs11.openSession(slot, CKF_SERIAL_SESSION | CKF_RW_SESSION)
     card_session.login(passcode, CKU_USER)
@@ -25,29 +37,22 @@ def sign(pkcs11lib, passcode, auth_session):
     card_session.logout()
     card_session.closeSession()
 
-    # return card_info
-
 def _get_card_info(card_session):
     info = {}
-
     private_keys = card_session.findObjects([(CKA_CLASS, CKO_PRIVATE_KEY),])
 
     for private_key in private_keys:
-      key_info = private_key.to_dict()
-      if len(key_info['CKA_LABEL']) < 46:
-        print(key_info['CKA_LABEL'])
-        print(key_info['CKA_ID'])
-        print(len(key_info['CKA_LABEL']))
-        print("")
+        key_info = private_key.to_dict()
 
-        info['key_id'] = key_info['CKA_ID']
+        if key_info['CKA_DECRYPT'] == True:
+            info['key_id'] = key_info['CKA_ID']
 
-    card_objects = card_session.findObjects([(CKA_CLASS, CKO_CERTIFICATE), (CKA_ID, info['key_id'])])
+    auth_cert = card_session.findObjects([(CKA_CLASS, CKO_CERTIFICATE), (CKA_ID, info['key_id'])])[0]
 
-    info['certificate'] = bytes(card_objects[0].to_dict()['CKA_VALUE'])
-    info['label'] = card_objects[0].to_dict()['CKA_LABEL'].decode('utf-8')
+    info['certificate'] = bytes(auth_cert.to_dict()['CKA_VALUE'])
+    info['label'] = auth_cert.to_dict()['CKA_LABEL'].decode('utf-8')
 
-    uid = _get_uid_from_subject(bytes(card_objects[0].to_dict()['CKA_SUBJECT']))
+    uid = _get_uid_from_subject(bytes(auth_cert.to_dict()['CKA_SUBJECT']))
 
     if type(uid) is bytes:
         info['uid'] = uid.decode('utf-8')

@@ -4,6 +4,8 @@ import re
 from jinja2 import Template
 import random
 import string
+import platform
+import json
 
 import cms
 import card
@@ -65,18 +67,16 @@ class authenticator:
         <gpPARAM name="uid">{{ uid }}</gpPARAM>
         </gpOBJECT>"""
 
-        """Analytics: {"IAVersion":"2.1.2.16",
-        "OSVersion":"Microsoft Windows 10 Enterprise 64-bit",
-        "JavaVersion":"1.8",
-        "Mode":"Normal",
-        "TrainingMode":"False",
-        "WinTabModeEnabled":"False",
-        "MiddlewareInstalled":["Gemalto 64bit"],
-        "CardReaders":["OMNIKEY AG Smart Card Reader USB 0"],
-        "RemoteSession":"False",
-        "ATR":"3B-F9-18-00-00-81-31-FE-45-4A-43-4F-50-34-31-56-32-32-AF",
-        "ActiveCardReader":"OMNIKEY AG Smart Card Reader USB 0",
-        "SessionId":"VkNaIEDAZQ"}"""
+        self.analytics = {
+            'OSVersion': platform.platform(),
+            'Mode': 'Normal',
+            'TrainingMode': 'False',
+            'WinTabModeEnabled': 'False',
+            'RemoteSession': 'False',
+            'CardReaders': [],
+            'ATR': None,
+            'SessionId': None
+        }
 
         self.role_select_uri = '%s/saml/RoleSelectionGP.jsp' % self.auth_uri
 
@@ -89,8 +89,12 @@ class authenticator:
         fh.setFormatter(formatter)
         self.log.info("Authenticator started")
 
-    def authenticate(self, passcode):
-        session = {'id': ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))}
+    def authenticate(self, passcode, atr=None):
+        session = {'id': ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10)),
+                   'analytics': self.analytics.copy(),}
+
+        session['analytics']['SessionId'] = session['id']
+        session['analytics']['ATR'] = atr
 
         self._auth_activate(session)
         self.log.info('Method=authenticate, Message=Activate Received, Session=%s' % session)
@@ -130,7 +134,8 @@ class authenticator:
         auth_activate = requests.post('%s/login/authactivate' % self.auth_uri,
                                       verify=False,
                                       data=auth_activate_body,
-                                      headers={'User-Agent': self.user_agent})
+                                      headers={'User-Agent': self.user_agent,
+                                               'Analytics': json.dumps(session['analytics'])})
 
         body = auth_activate.content.decode('utf-8')
 
@@ -164,7 +169,8 @@ class authenticator:
 
         auth_validate_response = requests.post('%s/login/authvalidate' % self.auth_uri,
                                                verify=False,
-                                               headers={'User-Agent': self.user_agent},
+                                               headers={'User-Agent': self.user_agent,
+                                                        'Analytics': json.dumps(session['analytics'])},
                                                data=auth_validate_body)
 
         body = auth_validate_response.content.decode('utf-8')
@@ -179,7 +185,8 @@ class authenticator:
 
             requests.get(uri,
                          verify=False,
-                         headers={'User-Agent': self.user_agent},
+                         headers={'User-Agent': self.user_agent,
+                                  'Analytics': json.dumps(session['analytics'])},
                          params={'token': session['sso_ticket'],
                                  'selectedRoleUid': session['roles'][0]['id'],
                                  'ssbMode': 0,

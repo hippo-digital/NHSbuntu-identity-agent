@@ -1,5 +1,5 @@
 import base64
-from pyasn1.type import univ, char, tag
+from pyasn1.type import univ, tag
 from pyasn1.codec.ber import encoder, decoder
 
 def envelope(challenge, cert, signature):
