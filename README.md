@@ -1,3 +1,8 @@
+| Caution   | 
+| ------------- | 
+| This IA is unsupported and not keeping up with the identity agent currently being deployed |
+| The latest, support IAs can be found here: https://digital.nhs.uk/services/registration-authorities-and-smartcards/care-identity-service/news-and-service-updates/oberthur-smartcard-updates  |
+
 # NHSbuntu-identity-agent
 
 ## Installation on Debian, Ubuntu or derivatives
